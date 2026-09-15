@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>受付・発券端末</title>
+  <script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js)"></script>
+  <script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js)"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    body { background: #d32f2f; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fff; user-select: none; }
+    
+    /* パスワード設定モーダル */
+    .modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
+    .modal-box { background: #fff; color: #333; padding: 30px; border-radius: 16px; text-align: center; width: 90%; max-width: 400px; }
+    input { width: 100%; padding: 15px; font-size: 1.5rem; margin: 15px 0; border: 2px solid #ccc; border-radius: 8px; text-align: center; }
+    button.btn-main { padding: 15px 30px; font-size: 1.2rem; background: #2e7d32; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; }
+
+    /* メイン発券ボタン */
+    .btn-touch { font-size: 3rem; padding: 60px 80px; background: #ffeb3b; color: #222; font-weight: bold; border: none; border-radius: 30px; box-shadow: 0 12px 0 #c7a700, 0 15px 20px rgba(0,0,0,0.4); cursor: pointer; }
+    .btn-touch:active { transform: translateY(8px); box-shadow: 0 4px 0 #c7a700; }
+
+    /* 発券完了表示 */
+    #ticket-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #111; flex-direction: column; justify-content: center; align-items: center; z-index: 5; }
+    .ticket-num { font-size: 8rem; font-weight: bold; color: #ffeb3b; margin: 20px 0; }
+  </style>
+</head>
+<body>
+
+  <!-- パスワード設定画面 -->
+  <div id="setup-modal" class="modal">
+    <div class="modal-box">
+      <h2>合言葉（パスワード）設定</h2>
+      <p style="margin-top:8px; font-size:0.9rem; color:#666;">※モニター・厨房画面と同じ文字列を入力</p>
+      <input type="text" id="room-pass" placeholder="例: bunkasai2026">
+      <button class="btn-main" onclick="startSystem()">受付開始</button>
+    </div>
+  </div>
+
+  <button class="btn-touch" onclick="issueTicket()">注文番号を発行</button>
+
+  <!-- 番号表示画面 -->
+  <div id="ticket-overlay">
+    <h2>あなたの番号</h2>
+    <div id="my-number" class="ticket-num">A101</div>
+    <p style="font-size: 1.5rem;">番号をお手元にお控えください</p>
+  </div>
+
+  <script>
+    // ★ご自身のFirebase設定に書き換えてください★
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "SENDER_ID",
+      appId: "APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let roomPass = "";
+
+    function startSystem() {
+      const pass = document.getElementById('room-pass').value.trim();
+      if (!pass) return alert('パスワードを入力してください');
+      roomPass = pass;
+      document.getElementById('setup-modal').style.display = 'none';
+      
+      // カウンターの初期化（未作成の場合）
+      db.ref(`rooms/${roomPass}/counter`).transaction((current) => {
+        if (current === null) return { letter: 65, num: 100 }; // A100スタート
+        return current;
+      });
+    }
+
+    function issueTicket() {
+      if (!roomPass) return;
+
+      const roomRef = db.ref(`rooms/${roomPass}`);
+      roomRef.child('counter').transaction((counter) => {
+        if (!counter) counter = { letter: 65, num: 100 };
+        
+        // A100 ~ Z999 自動生成
+        const letterChar = String.fromCharCode(counter.letter);
+        const numStr = String(counter.num).padStart(3, '0');
+        const orderId = `${letterChar}${numStr}`;
+
+        counter.num++;
+        if (counter.num > 999) {
+          counter.num = 100;
+          counter.letter++;
+          if (counter.letter > 90) counter.letter = 65;
+        }
+
+        // 新規注文データを保存
+        db.ref(`rooms/${roomPass}/orders/${orderId}`).set({
+          id: orderId,
+          status: 'cooking',
+          createdAt: Date.now()
+        });
+
+        // 画面に番号を表示
+        showTicket(orderId);
+
+        return counter;
+      });
+    }
+
+    function showTicket(id) {
+      document.getElementById('my-number').innerText = id;
+      const overlay = document.getElementById('ticket-overlay');
+      overlay.style.display = 'flex';
+      setTimeout(() => { overlay.style.display = 'none'; }, 4000);
+    }
+  </script>
+</body>
+</html>
