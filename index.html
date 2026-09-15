@@ -189,10 +189,56 @@
     }
 
     function speakNumber(id) {
-      if (!('speechSynthesis' in window)) return;
-      const uttr = new SpeechSynthesisUtterance(`${id.split('').join(' ')}番のお客様、お受け取り口にお越しください。`);
-      uttr.lang = 'ja-JP'; uttr.rate = 0.95;
-      window.speechSynthesis.speak(uttr);
+     /* ピンポン音（効果音）を鳴らす関数 */
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    
+    // 1音目 (ミ: E5)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.frequency.value = 659.25;
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    gain1.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+    osc1.stop(now + 1.2);
+
+    // 2音目 (ド: C5)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.frequency.value = 523.25;
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.4);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 1.6);
+    osc2.stop(now + 1.6);
+  } catch(e) { console.error(e); }
+}
+
+/* 読み上げ処理 */
+function speakNumber(id) {
+  if (!('speechSynthesis' in window)) return;
+
+  // ① ピンポンチャイムを鳴らす
+  playChime();
+
+  // ② 読み上げテキストの作成（文字と文字の間にスペースを入れて「エー イチ ゼロ イチ」と読ませる）
+  const spelledId = id.split('').join(' ');
+  const text = `${spelledId} 番のお客様、商品が出来上がりました。お受け取りぐちまでお越しください。`;
+
+  const uttr = new SpeechSynthesisUtterance(text);
+  uttr.lang = 'ja-JP';
+  uttr.rate = 0.95;  // スピード（少しゆっくり）
+  uttr.pitch = 1.1;  // 声の高さ（聞き取りやすい高め）
+  uttr.volume = 1.0; // 音量最大
+
+  // ③ 読み上げ実行（少し間を置いてから話す）
+  setTimeout(() => {
+    window.speechSynthesis.speak(uttr);
+  }, 800);
+}
     }
 
     /* 描画：厨房 */
