@@ -4,16 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>受付・発券端末</title>
-  <script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js)"></script>
-  <script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js)"></script>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
     body { background: #d32f2f; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fff; user-select: none; }
     
     /* パスワード設定モーダル */
-    .modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
+    .modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
     .modal-box { background: #fff; color: #333; padding: 30px; border-radius: 16px; text-align: center; width: 90%; max-width: 400px; }
-    input { width: 100%; padding: 15px; font-size: 1.5rem; margin: 15px 0; border: 2px solid #ccc; border-radius: 8px; text-align: center; }
+    input { width: 100%; padding: 15px; font-size: 1.5rem; margin: 15px 0; border: 2px solid #ccc; border-radius: 8px; text-align: center; color: #000; }
     button.btn-main { padding: 15px 30px; font-size: 1.2rem; background: #2e7d32; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; }
 
     /* メイン発券ボタン */
@@ -21,7 +22,7 @@
     .btn-touch:active { transform: translateY(8px); box-shadow: 0 4px 0 #c7a700; }
 
     /* 発券完了表示 */
-    #ticket-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #111; flex-direction: column; justify-content: center; align-items: center; z-index: 5; }
+    #ticket-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #111; flex-direction: column; justify-content: center; align-items: center; z-index: 200; }
     .ticket-num { font-size: 8rem; font-weight: bold; color: #ffeb3b; margin: 20px 0; }
   </style>
 </head>
@@ -33,11 +34,11 @@
       <h2>合言葉（パスワード）設定</h2>
       <p style="margin-top:8px; font-size:0.9rem; color:#666;">※モニター・厨房画面と同じ文字列を入力</p>
       <input type="text" id="room-pass" placeholder="例: bunkasai2026">
-      <button class="btn-main" onclick="startSystem()">受付開始</button>
+      <button type="button" class="btn-main" onclick="startSystem()">受付開始</button>
     </div>
   </div>
 
-  <button class="btn-touch" onclick="issueTicket()">注文番号を発行</button>
+  <button type="button" class="btn-touch" onclick="issueTicket()">注文番号を発行</button>
 
   <!-- 番号表示画面 -->
   <div id="ticket-overlay">
@@ -47,7 +48,7 @@
   </div>
 
   <script>
-    // ★ご自身のFirebase設定に書き換えてください★
+    // ★ここをご自身のFirebase設定に書き換えてください★
     const firebaseConfig = {
       apiKey: "AIzaSyBQ9PtlSkCUsKf8L-ilEfWZ9r6kXuo5QWU",
     authDomain: "bunkasai-mcd.firebaseapp.com",
@@ -56,33 +57,66 @@
     storageBucket: "bunkasai-mcd.firebasestorage.app",
     messagingSenderId: "182461350522",
     appId: "1:182461350522:web:984d3e52f0c4d90d08f1c3",
+    measurementId: "G-BX9MRLYKMN"
     };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
 
+    let db = null;
     let roomPass = "";
 
+    // 初期化処理
+    try {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      db = firebase.database();
+    } catch (e) {
+      console.error("Firebase初期化失敗:", e);
+    }
+
     function startSystem() {
-      const pass = document.getElementById('room-pass').value.trim();
-      if (!pass) return alert('パスワードを入力してください');
-      roomPass = pass;
-      document.getElementById('setup-modal').style.display = 'none';
+      const inputEl = document.getElementById('room-pass');
+      const pass = inputEl.value.trim();
       
-      // カウンターの初期化（未作成の場合）
-      db.ref(`rooms/${roomPass}/counter`).transaction((current) => {
-        if (current === null) return { letter: 65, num: 100 }; // A100スタート
-        return current;
-      });
+      if (!pass) {
+        alert('パスワード（合言葉）を入力してください！');
+        return;
+      }
+
+      roomPass = pass;
+      
+      // ボタンを押したら先に黒い画面を消す
+      document.getElementById('setup-modal').style.display = 'none';
+
+      // データベースの初期化
+      if (db) {
+        try {
+          db.ref(`rooms/${roomPass}/counter`).transaction((current) => {
+            if (current === null) return { letter: 65, num: 100 };
+            return current;
+          });
+        } catch (e) {
+          console.error("Databaseエラー:", e);
+        }
+      } else {
+        alert("Firebaseの接続設定（firebaseConfig）にミスがある可能性があります。コードを確認してください。");
+      }
     }
 
     function issueTicket() {
-      if (!roomPass) return;
+      if (!roomPass) {
+        alert("最初にパスワードを設定してください。");
+        return;
+      }
+
+      if (!db) {
+        alert("Firebase接続エラーです。");
+        return;
+      }
 
       const roomRef = db.ref(`rooms/${roomPass}`);
       roomRef.child('counter').transaction((counter) => {
         if (!counter) counter = { letter: 65, num: 100 };
         
-        // A100 ~ Z999 自動生成
         const letterChar = String.fromCharCode(counter.letter);
         const numStr = String(counter.num).padStart(3, '0');
         const orderId = `${letterChar}${numStr}`;
@@ -94,14 +128,13 @@
           if (counter.letter > 90) counter.letter = 65;
         }
 
-        // 新規注文データを保存
+        // 注文をデータベースへ追加
         db.ref(`rooms/${roomPass}/orders/${orderId}`).set({
           id: orderId,
           status: 'cooking',
           createdAt: Date.now()
         });
 
-        // 画面に番号を表示
         showTicket(orderId);
 
         return counter;
