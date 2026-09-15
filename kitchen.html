@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>厨房管理</title>
+  <script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js)"></script>
+  <script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js)"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f0f2f5; }
+    .top-bar { margin-bottom: 20px; display: flex; gap: 10px; }
+    input { padding: 10px; font-size: 1rem; border-radius: 6px; border: 1px solid #ccc; }
+    button.btn-connect { padding: 10px 20px; background: #1976d2; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+
+    .card-grid { display: flex; flex-wrap: wrap; gap: 20px; }
+    .card { background: #fff; border-radius: 12px; padding: 20px; width: 220px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+    .card-id { font-size: 3.5rem; font-weight: bold; color: #333; margin-bottom: 10px; }
+    .btn { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; color: #fff; margin-top: 10px; }
+    .btn-ready { background: #2e7d32; }
+    .btn-complete { background: #757575; }
+  </style>
+</head>
+<body>
+
+  <h1>厨房コントロールパネル</h1>
+  <div class="top-bar">
+    <input type="text" id="pass-input" placeholder="パスワード">
+    <button class="btn-connect" onclick="connectRoom()">接続</button>
+  </div>
+
+  <div id="card-grid" class="card-grid"></div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "SENDER_ID",
+      appId: "APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let roomPass = "";
+
+    function connectRoom() {
+      const pass = document.getElementById('pass-input').value.trim();
+      if (!pass) return alert('パスワードを入力してください');
+      roomPass = pass;
+
+      db.ref(`rooms/${roomPass}/orders`).on('value', (snapshot) => {
+        const data = snapshot.val() || {};
+        render(Object.values(data));
+      });
+
+      alert(`パスワード「${roomPass}」で接続しました`);
+    }
+
+    function updateStatus(id, newStatus) {
+      if (newStatus === 'completed') {
+        db.ref(`rooms/${roomPass}/orders/${id}`).remove();
+      } else {
+        db.ref(`rooms/${roomPass}/orders/${id}`).update({ status: newStatus });
+      }
+    }
+
+    function render(orders) {
+      const grid = document.getElementById('card-grid');
+      grid.innerHTML = orders.map(o => `
+        <div class="card">
+          <div class="card-id">${o.id}</div>
+          ${o.status === 'cooking' 
+            ? `<button class="btn btn-ready" onclick="updateStatus('${o.id}', 'ready')">呼び出す</button>`
+            : `<button class="btn btn-complete" onclick="updateStatus('${o.id}', 'completed')">お渡し完了</button>`
+          }
+        </div>
+      `).join('');
+    }
+  </script>
+</body>
+</html>
