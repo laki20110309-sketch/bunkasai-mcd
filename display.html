@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>呼び出しモニター</title>
+  <script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js)"></script>
+  <script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js)"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    body { display: flex; height: 100vh; background: #121212; color: #fff; overflow: hidden; position: relative; }
+    
+    /* 右上のパスワード設定ヘッダー */
+    .top-bar {
+      position: absolute; top: 15px; right: 20px; z-index: 100;
+      background: rgba(0,0,0,0.7); padding: 8px 15px; border-radius: 30px; display: flex; gap: 10px; align-items: center;
+    }
+    .top-bar input { padding: 6px 12px; font-size: 1rem; border-radius: 6px; border: none; width: 140px; text-align: center; }
+    .top-bar button { padding: 6px 15px; font-size: 1rem; background: #00e676; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+
+    /* メインモニター表示 */
+    .column { flex: 1; padding: 25px; display: flex; flex-direction: column; margin-top: 50px; }
+    .cooking-zone { border-right: 3px solid #333; background: #181818; }
+    .ready-zone { background: #0f2417; }
+    
+    h2 { font-size: 2.5rem; text-align: center; padding-bottom: 15px; border-bottom: 2px solid #444; margin-bottom: 20px; }
+    .cooking-zone h2 { color: #ffb703; }
+    .ready-zone h2 { color: #00e676; }
+
+    .grid { display: flex; flex-wrap: wrap; gap: 20px; align-content: flex-start; flex: 1; }
+    
+    .card {
+      font-size: 3.8rem; font-weight: bold; padding: 15px 30px; border-radius: 16px;
+      background: #2a2a2a; letter-spacing: 2px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+
+    /* 完成時のアニメーション */
+    .ready-zone .card {
+      background: #00e676; color: #000;
+      animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0) translateY(-50px); opacity: 0; }
+      70% { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 右上の連動用入力欄 -->
+  <div class="top-bar">
+    <input type="text" id="pass-input" placeholder="パスワード">
+    <button onclick="connectRoom()">接続</button>
+  </div>
+
+  <div class="column cooking-zone">
+    <h2>調理中 / Cooking</h2>
+    <div id="cooking-grid" class="grid"></div>
+  </div>
+
+  <div class="column ready-zone">
+    <h2>お受け取り / Ready</h2>
+    <div id="ready-grid" class="grid"></div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "SENDER_ID",
+      appId: "APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let previousReadyIds = new Set();
+    let isFirstLoad = true;
+
+    function connectRoom() {
+      const pass = document.getElementById('pass-input').value.trim();
+      if (!pass) return alert('パスワードを入力してください');
+
+      // ブラウザ音声エンジンの有効化
+      const u = new SpeechSynthesisUtterance('');
+      window.speechSynthesis.speak(u);
+
+      // リアルタイムデータ監視開始
+      db.ref(`rooms/${pass}/orders`).on('value', (snapshot) => {
+        const data = snapshot.val() || {};
+        const orders = Object.values(data);
+
+        render(orders);
+
+        // 新しく「ready」になった番号を検知して音声読み上げ
+        if (!isFirstLoad) {
+          orders.forEach(o => {
+            if (o.status === 'ready' && !previousReadyIds.has(o.id)) {
+              speakNumber(o.id);
+            }
+          });
+        }
+        
+        previousReadyIds = new Set(orders.filter(o => o.status === 'ready').map(o => o.id));
+        isFirstLoad = false;
+      });
+
+      alert(`パスワード「${pass}」で連動を開始しました！`);
+    }
+
+    function speakNumber(orderId) {
+      if (!('speechSynthesis' in window)) return;
+      const formattedText = orderId.split('').join(' ');
+      const text = `${formattedText}番のお客様、お受け取り口にお越しください。`;
+
+      const uttr = new SpeechSynthesisUtterance(text);
+      uttr.lang = 'ja-JP';
+      uttr.rate = 0.95;
+      window.speechSynthesis.speak(uttr);
+    }
+
+    function render(orders) {
+      const cookingGrid = document.getElementById('cooking-grid');
+      const readyGrid = document.getElementById('ready-grid');
+
+      cookingGrid.innerHTML = orders.filter(o => o.status === 'cooking')
+        .map(o => `<div class="card">${o.id}</div>`).join('');
+
+      readyGrid.innerHTML = orders.filter(o => o.status === 'ready')
+        .map(o => `<div class="card">${o.id}</div>`).join('');
+    }
+  </script>
+</body>
+</html>
